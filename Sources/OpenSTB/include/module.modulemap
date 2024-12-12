@@ -1,0 +1,4 @@
+module OpenSTB {
+    header "stb_image.h"
+    export *
+}
