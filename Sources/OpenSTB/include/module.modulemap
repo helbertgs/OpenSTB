@@ -1,4 +1,5 @@
 module OpenSTB {
     header "stb_image.h"
+    header "stb_truetype.h"
     export *
 }
