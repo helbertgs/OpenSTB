@@ -513,8 +513,8 @@ extern "C" {
 typedef struct
 {
    unsigned char *data;
-   int cursor;
-   int size;
+   size_t cursor;
+   size_t size;
 } stbtt__buf;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1130,10 +1130,9 @@ typedef int stbtt__test_oversample_pow2[(STBTT_MAX_OVERSAMPLE & (STBTT_MAX_OVERS
 // stbtt__buf helpers to parse data from file
 //
 
-static stbtt_uint8 stbtt__buf_get8(stbtt__buf *b)
+static int stbtt__buf_get8(stbtt__buf *b)
 {
-   if (b->cursor >= b->size)
-      return 0;
+   if (b->cursor+1 > b->size) return 0;
    return b->data[b->cursor++];
 }
 
@@ -1144,15 +1143,18 @@ static stbtt_uint8 stbtt__buf_peek8(stbtt__buf *b)
    return b->data[b->cursor];
 }
 
-static void stbtt__buf_seek(stbtt__buf *b, int o)
+static void stbtt__buf_seek(stbtt__buf *b, size_t o)
 {
-   STBTT_assert(!(o > b->size || o < 0));
-   b->cursor = (o > b->size || o < 0) ? b->size : o;
+   STBTT_assert(0 <= b->size);
+   b->cursor = o;
 }
 
-static void stbtt__buf_skip(stbtt__buf *b, int o)
+static void stbtt__buf_skip(stbtt__buf *b, intptr_t offset)
 {
-   stbtt__buf_seek(b, b->cursor + o);
+   size_t newpos = (offset < 0) ? 0 : (size_t) offset;
+   newpos += b->cursor;
+   if (newpos > b->size) newpos = b->size;
+   stbtt__buf_seek(b, newpos);
 }
 
 static stbtt_uint32 stbtt__buf_get(stbtt__buf *b, int n)
@@ -1163,6 +1165,25 @@ static stbtt_uint32 stbtt__buf_get(stbtt__buf *b, int n)
    for (i = 0; i < n; i++)
       v = (v << 8) | stbtt__buf_get8(b);
    return v;
+}
+
+static uint16_t stbtt__buf_get16(stbtt__buf *b)
+{
+   if (b->cursor + 2 > b->size) return 0;
+   uint16_t result = (uint16_t) b->data[b->cursor] << 8;
+   result |= (uint16_t) b->data[b->cursor + 1];
+   b->cursor += 2;
+   return result;
+}
+
+static uint32_t stbtt__buf_get32(stbtt__buf *b) {
+   if (b->cursor + 4 > b->size) return 0;
+   uint32_t result = (uint32_t) b->data[b->cursor] << 24;
+   result |= (uint32_t) b->data[b->cursor + 1] << 16;
+   result |= (uint32_t) b->data[b->cursor + 2] << 8;
+   result |= (uint32_t) b->data[b->cursor + 3];
+   b->cursor += 4;
+   return result;
 }
 
 static stbtt__buf stbtt__new_buf(const void *p, size_t size)
@@ -1178,12 +1199,18 @@ static stbtt__buf stbtt__new_buf(const void *p, size_t size)
 #define stbtt__buf_get16(b)  stbtt__buf_get((b), 2)
 #define stbtt__buf_get32(b)  stbtt__buf_get((b), 4)
 
-static stbtt__buf stbtt__buf_range(const stbtt__buf *b, int o, int s)
+static stbtt__buf stbtt__buf_range(const stbtt__buf *b, size_t o, size_t s)
 {
-   stbtt__buf r = stbtt__new_buf(NULL, 0);
-   if (o < 0 || s < 0 || o > b->size || s > b->size - o) return r;
+   stbtt__buf r;
+   if (o > b->size || s > b->size - o) {
+      r.data = NULL;
+      r.cursor = r.size = 0;
+      return r;
+   }
+   
    r.data = b->data + o;
-   r.size = s;
+   r.cursor = 0;
+   r.size = (int) s;
    return r;
 }
 
